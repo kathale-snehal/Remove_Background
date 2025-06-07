@@ -13,5 +13,5 @@ A Python-based tool to remove backgrounds from images and extract non-transparen
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/kathale-snehal/Remove_background.git
+   git clone https://github.com/kathale-snehal/Remove_Background.git
    cd Remove_Background
