@@ -11,7 +11,19 @@
         integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
 
     <title>BG_Remove</title>
-    
+    <style>
+        #resultContainer {
+            margin-top: 20px;
+            display: none;
+        }
+        #resultImage {
+            max-width: 100%;
+            height: auto;
+        }
+        .download-btn {
+            margin-top: 10px;
+        }
+    </style>
 </head>
 
 <body>
@@ -33,10 +45,33 @@
       </div>
       <div class="row">
         <input id="upload_img" type="file" class="form-control" placeholder="Upload image" aria-label="Upload image">
-        <input id="base64" type="text" class="form-control" style="display: none;" placeholder="Enter base64" aria-label="Enter base64">
+        <textarea id="base64" type="text" class="form-control" style="display: none; height: 150px;" placeholder="Enter base64" aria-label="Enter base64"></textarea>
       </div>
       <div class="row mt-3">
         <button id="proceed_btn" type="button" class="btn btn-success" disabled>Process Image</button>
+      </div>
+      
+      <!-- Result container -->
+      <div id="resultContainer" class="row mt-4">
+        <div class="col-md-6">
+          <h4>Original Image</h4>
+          <img id="originalImage" class="img-fluid" />
+        </div>
+        <div class="col-md-6">
+          <h4>Result</h4>
+          <img id="resultImage" class="img-fluid" />
+          <button id="downloadBtn" class="btn btn-primary download-btn">Download Result</button>
+        </div>
+      </div>
+      
+      <!-- Loading spinner -->
+      <div id="loadingSpinner" class="row mt-3" style="display: none;">
+        <div class="col-12 text-center">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <p>Processing image...</p>
+        </div>
       </div>
     </div>
   </div>
@@ -54,6 +89,11 @@
       const base64Input = document.getElementById('base64');
       const mainInput = document.getElementById('main_input');
       const proceedBtn = document.getElementById('proceed_btn');
+      const resultContainer = document.getElementById('resultContainer');
+      const originalImage = document.getElementById('originalImage');
+      const resultImage = document.getElementById('resultImage');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const loadingSpinner = document.getElementById('loadingSpinner');
       
       // Set initial state (Upload image selected by default)
       let currentSelection = 'upload';
@@ -78,6 +118,14 @@
 
       // Handle file upload
       uploadImg.addEventListener('change', function(e) {
+        if (this.files && this.files[0]) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            originalImage.src = e.target.result;
+            mainInput.value = this.files[0].name;
+          };
+          reader.readAsDataURL(this.files[0]);
+        }
         checkInputValidity();
       });
 
@@ -87,26 +135,78 @@
       });
 
       // Proceed button click handler
-      proceedBtn.addEventListener('click', function() {
+      proceedBtn.addEventListener('click', async function() {
         if (currentSelection === 'upload' && uploadImg.files.length > 0) {
-          console.log("Processing uploaded file:", uploadImg.files[0].name);
-          // Process the file here
+          await processImage(uploadImg.files[0]);
         } else if (currentSelection === 'base64' && base64Input.value.trim() !== '') {
-          console.log("Processing base64 string");
-          // Process the base64 string here
+          await processImage(null, base64Input.value.trim());
         }
       });
+      
+      // Download button click handler
+      downloadBtn.addEventListener('click', function() {
+        const link = document.createElement('a');
+        link.href = resultImage.src;
+        link.download = 'background_removed.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+
+      async function processImage(file, base64Str) {
+        try {
+          loadingSpinner.style.display = 'block';
+          proceedBtn.disabled = true;
+          
+          const formData = new FormData();
+          if (file) {
+            formData.append('file', file);
+          } else if (base64Str) {
+            formData.append('base64_str', base64Str);
+          }
+          
+          const response = await fetch('http://localhost:8000/remove-background', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (data.status === 'success') {
+            resultImage.src = data.image;
+            resultContainer.style.display = 'flex';
+            
+            // Scroll to result
+            resultContainer.scrollIntoView({ behavior: 'smooth' });
+          } else {
+            throw new Error(data.message || 'Unknown error');
+          }
+        } catch (error) {
+          alert(`Error processing image: ${error.message}`);
+          console.error('Error:', error);
+        } finally {
+          loadingSpinner.style.display = 'none';
+          proceedBtn.disabled = false;
+        }
+      }
 
       function updateUI() {
         if (currentSelection === 'upload') {
           uploadImg.style.display = 'block';
           base64Input.style.display = 'none';
           mainInput.placeholder = "Upload an image";
+          mainInput.value = '';
         } else {
           uploadImg.style.display = 'none';
           base64Input.style.display = 'block';
           mainInput.placeholder = "Enter base64 string";
+          mainInput.value = '';
         }
+        resultContainer.style.display = 'none';
         checkInputValidity();
       }
 
@@ -121,3 +221,4 @@
   </script>
 </body>
 </html>
+
