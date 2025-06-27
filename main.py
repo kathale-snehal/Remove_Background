@@ -1,86 +1,97 @@
 
-# from fastapi import FastAPI, HTTPException
-# from pydantic import BaseModel
+from fastapi import FastAPI,Request, UploadFile, File, HTTPException,Body
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from typing import Optional
 
-# app = FastAPI()
-
-# class Task(BaseModel):
-#     title: str
-#     description: str = ""
-
-# tasks = []
-
-# @app.get("/tasks")
-# def read_task():
-#     if not tasks:
-#         return {"message": "no task here"}
-#     return tasks
-
-# @app.post("/tasks")
-# def add_task(task: Task):
-#     tasks.append(task)
-#     return {"message": "task added"}
-
-# @app.get("/tasks/{task_id}", response_model=Task)
-# def get_task_from_id(task_id: int):
-#     if 0 <= task_id < len(tasks):
-#         return tasks[task_id]
-#     raise HTTPException(status_code=404, detail="task not found")
-
-# @app.put("/tasks/{task_id}", response_model=Task)
-# def update_task_from_id(task_id: int, updated_task: Task):
-#     if 0 <= task_id < len(tasks):
-#         tasks[task_id] = updated_task
-#         return updated_task
-#     raise HTTPException(status_code=404, detail="task not found")
-
-# @app.delete("/tasks/{task_id}", response_model=Task)
-# def delete_task_from_id(task_id: int):
-#     if 0 <= task_id < len(tasks):
-#         return tasks.pop(task_id)
-#     raise HTTPException(status_code=404, detail="task not found")
+# import os
 
 
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import base64
+from io import BytesIO
+from rembg import remove
+from PIL import Image
+import uvicorn
+import numpy as np
 
 app = FastAPI()
 
-class Task(BaseModel):
-    title: str
-    description: str = ""
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-tasks = []
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/tasks")
-def read_tasks():
-    return tasks or {"message": "No tasks available"}
+template = Jinja2Templates( directory= "templates" )
+# godb+srv://imcasnehal:snehal123@cluster0.2cfhi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+# conn = MongoClient("mongodb+srv://imcasnehal:snehal123@cluster0.2cfhi.mongodb.net/")
 
-@app.post("/tasks")
-def add_task(task: Task):
-    tasks.append(task)
-    return {"message": "Task added successfully", "task": task}
+@app.get("/", response_class=HTMLResponse)
+async def great(request: Request):
+    return template.TemplateResponse('index.html' ,{"request": request, "title": "FastAP with"})
 
-@app.get("/tasks/{task_id}")
-def get_task(task_id: int):
+
+def base64_to_image(base64_string: str) -> Image.Image:
+    """Convert base64 string to PIL Image"""
     try:
-        return tasks[task_id]
-    except IndexError:
-        raise HTTPException(status_code=404, detail="Task not found")
+        image_data = base64.b64decode(base64_string.split(",")[1] if "," in base64_string else base64_string)
+        return Image.open(BytesIO(image_data))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
 
-@app.put("/tasks/{task_id}")
-def update_task(task_id: int, updated_task: Task):
-    try:
-        tasks[task_id] = updated_task
-        return {"message": "Task updated", "task": updated_task}
-    except IndexError:
-        raise HTTPException(status_code=404, detail="Task not found")
+def image_to_base64(image: Image.Image, format: str = "PNG") -> str:
+    """Convert PIL Image to base64 string"""
+    buffered = BytesIO()
+    image.save(buffered, format=format)
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-@app.delete("/tasks/{task_id}")
-def delete_task(task_id: int):
+@app.post("/remove-background")
+async def remove_background(
+    file: UploadFile = File(None),
+    base64_str: Optional[str] = Body(None)
+):
+# async def remove_background(file: UploadFile = File(None), base64_str: str = None):
+    """
+    Remove background from either uploaded file or base64 string
+    """
     try:
-        deleted_task = tasks.pop(task_id)
-        return {"message": "Task deleted", "task": deleted_task}
-    except IndexError:
-        raise HTTPException(status_code=404, detail="Task not found")
+        if file:
+            # Process uploaded file
+            image = Image.open(BytesIO(await file.read()))
+        elif base64_str:
+            # Process base64 string
+            image = base64_to_image(base64_str)
+        else:
+            raise HTTPException(status_code=400, detail="Either file or base64_str must be provided")
+        
+        # Remove background
+        output_image = remove(image)
+        
+        # If output_image is bytes, convert to PIL Image
+        if isinstance(output_image, bytes):
+            output_image = Image.open(BytesIO(output_image))
+        elif isinstance(output_image, np.ndarray):
+            output_image = Image.fromarray(output_image)
+
+        # Convert to base64 for response
+        output_base64 = image_to_base64(output_image)
+        
+        return {
+            "status": "success",
+            "image": f"data:image/png;base64,{output_base64}"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
