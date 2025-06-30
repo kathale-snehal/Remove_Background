@@ -30,9 +30,6 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 template = Jinja2Templates( directory= "templates" )
-# godb+srv://imcasnehal:snehal123@cluster0.2cfhi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-# conn = MongoClient("mongodb+srv://imcasnehal:snehal123@cluster0.2cfhi.mongodb.net/")
-
 @app.get("/", response_class=HTMLResponse)
 async def great(request: Request):
     return template.TemplateResponse('index.html' ,{"request": request, "title": "FastAP with"})
